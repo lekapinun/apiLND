@@ -6,6 +6,9 @@ var jwt = require('jsonwebtoken');
 var config = require('./config.js');
 var firebase = require('firebase');
 var md5 = require('md5');
+var cors = require('cors');
+var fetch = require('node-fetch');
+var axios = require('axios');
 let configFirebase = {
     apiKey: "AIzaSyD9x7Be3e1So1bhvNFMfpq5XG6MDr81OLk",
     authDomain: "lungnoduledetection.firebaseapp.com",
@@ -18,31 +21,40 @@ const firebaseApp = firebase.initializeApp(configFirebase);
 const db = firebaseApp.database();
 // var hash = require('./hash');
 var port = process.env.PORT || config.port; 
-var hostname = config.hostname
+// var hostname = config.hostname
 app.set('superSecret', config.secret);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
+app.use(cors())
 
 app.get('/', (req, res) => {
-    addUserInfo()
+    // addUserInfo()
     res.json("Hi");
 });
 
 app.post('/signin', (req, res) => {
     var form = req.body
+    var Ref = firebase.database().ref("users/");
     firebase.auth().signInWithEmailAndPassword(form.email, form.password).then(
         user => {
             console.log('User authentication successful');
-            const payload = {
-                email: user.email,
-            };
-            var token = jwt.sign(payload, config.secret, {
-                expiresIn: 86400 // expires in 24 hours
-            })
-            res.json({
-                success: true,
-                message: 'Your accound has been loged in!',
-                token: token
+            Ref.orderByChild("email").equalTo(user.email).on("child_added", function(data) {
+                var usertable = data.val();
+                // console.log(usertable.fname)
+                const payload = {
+                    email: user.email,
+                };
+                var token = jwt.sign(payload, config.secret, {
+                    expiresIn: 86400 // expires in 24 hours
+                })
+                res.json({
+                    success: true,
+                    message: 'Your accound has been loged in!',
+                    token: token,
+                    name : usertable.fname
+                });
+            }, function (error) {
+                res.json("Error: " + error.code)
             });
         },
         err => {
@@ -101,9 +113,19 @@ app.post('/signup', (req, res) => {
             console.log(uid);
             db.ref('users/'+ uid).set(newUser)
             console.log('Your accound has been created!')
+
+            const payload = {
+                email: user.email,
+            };
+            var token = jwt.sign(payload, config.secret, {
+                expiresIn: 86400 // expires in 24 hours
+            })
+
             res.json({
                 success: true,
                 message: 'Your accound has been created!',
+                token: token,
+                name : form.fname
             });
         }, 
         error => {
@@ -125,11 +147,7 @@ app.post('/signup', (req, res) => {
 })
 
 app.use(function(req, res, next) {
-    // if token is valid, continue to the specified sensitive route
-    // if token is NOT valid, return error message
-    // read a token from body or urlencoded or header (key = x-access-token)
-    var token = req.body.token || req.query.token || req.headers['x-access-token'] // || req.cookies.auth;
-    
+    var token = req.body.token || req.query.token || req.headers['x-access-token'] 
     if (token) {
         jwt.verify(token, config.secret, function(err, decoded) {
             if (err) {
@@ -138,8 +156,8 @@ app.use(function(req, res, next) {
                     message: 'Invalid token.'
                 });
             } else {
-                req.decoded = decoded; // add decoded token to request obj.
-                next(); // continue to the sensitive route
+                req.decoded = decoded; 
+                next();
             }
         });
     } else {
@@ -150,11 +168,111 @@ app.use(function(req, res, next) {
     }
 });
 
-app.get('/test', (req, res) => {
-    res.json("EiEi");
+app.get('/usertable', (req, res) => {
+    emailUser = req.decoded
+    
+    var Ref = firebase.database().ref("users/");
+
+    Ref.orderByChild("email").equalTo(emailUser.email).on("child_added", function(data) {
+        var usertable = data.val();
+        console.log(usertable)
+        res.json(usertable.table)
+    }, function (error) {
+        res.json("Error: " + error.code)
+    });
 });
+
+app.post('/addtable', (req, res) => {
+    var form = req.body
+    var emailUser = req.decoded
+    var Ref = firebase.database().ref("users/");
+    Ref.orderByChild("email").equalTo(emailUser.email).once("value", function(data) {
+        var userKey
+        for (let key in data.val()) {
+            userKey = key
+            break
+        }
+        var newData = {
+            name: form.name,
+            gender: form.gender,
+            age: form.age,
+            date: form.date,
+            prediction: "Calculating...",
+            id: form.id,
+            imageURL : form.imageURL,
+            imageURLresult : form.imageURLresult,
+            fact: form.fact,
+            stat: form.stat
+        }
+        fetch('https://lungnoduledetection.firebaseio.com/users/' + userKey + '/table.json',{
+            method: "POST",
+            body: JSON.stringify(newData),
+            headers: { 'Content-Type': "application/x-www-form-urlencoded" }
+        })
+        .then(response => {         
+            res.json({success : true})
+        }) 
+        .catch((error) => {
+            res.json({success : false})
+            console.log(error);
+        }); 
+    }, function (error) {
+        res.json("Error: " + error.code)
+        // console.log("Error: " + error.code);
+    });
+})
+
+app.put('/editdata',(req,res) => {
+    var form = req.body
+    var emailUser = req.decoded
+    var Ref = firebase.database().ref("users/");
+    Ref.orderByChild("email").equalTo(emailUser.email).once("value", function(data) {
+        var userKey
+        for (let key in data.val()) {
+            userKey = key
+            break
+        }
+        // console.log('https://lungnoduledetection.firebaseio.com/users/' + userKey + '/table/' + form.id + '.json')
+        // var Ref = firebase.database().ref("users/" + userKey + '/table/' + form.id);
+        // Ref.once("value", function(data) {
+        //     dataFit = data.val()
+        //     var factEdit
+        //     if(dataFit.fact != form.fact){
+        //         factEdit = form.fact
+        //     } else {
+        //         factEdit = dataFit.fact
+        //     }
+            var editData = {
+                name: form.name,
+                fact: form.fact,
+                stat: '1',
+                gender: form.gender,
+                age: form.age,
+                date: form.date,
+                prediction: form.prediction,
+                imageURL : form.imageURL,
+                imageURLresult : form.imageURLresult,
+            } 
+            console.log(editData)
+            fetch('https://lungnoduledetection.firebaseio.com/users/' + userKey + '/table/' + form.id_data + '.json',{
+                method: "PUT",
+                body: JSON.stringify(editData),
+                headers: { 'Content-Type': "application/x-www-form-urlencoded" }
+            })
+            .then(response => {         
+                res.json({success : true})
+            }) 
+            .catch((error) => {
+                res.json({success : false})
+                console.log(error);
+            }); 
+        // })
+    }, function (error) {
+        res.json("Error: " + error.code)
+        // console.log("Error: " + error.code);
+    });
+})
 
 app.listen(port, () => {
     console.log('Magic happens at http://localhost:' + port);
 });
-

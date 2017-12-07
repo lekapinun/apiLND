@@ -12,14 +12,18 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "axios": "^0.17.1",
     "body-parser": "^1.18.2",
     "cookie-parser": "^1.4.3",
+    "cors": "^2.8.4",
     "ejs": "^2.5.7",
     "express": "^4.16.2",
     "firebase": "^4.7.0",
+    "googleapis": "^23.0.0",
     "jsonwebtoken": "^8.1.0",
     "md5": "^2.2.1",
     "mongoose": "^4.13.0",
-    "morgan": "^1.9.0"
+    "morgan": "^1.9.0",
+    "node-fetch": "^1.7.3"
   }
 }
